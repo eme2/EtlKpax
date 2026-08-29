@@ -85,9 +85,9 @@ function calculerEtInsererConsommation() {
                 }
 
             const compteursResult = db.exec(query, [numero_de_serie, source]);
-            if (numero_de_serie == '3100R412455') {
-                console.log("Trouvé 3100R412455")
-            }
+            // if (numero_de_serie == '3100R412455' || numero_de_serie == '4601523412F6X') {
+            //     console.log("Trouvé machine cherchée")
+            // }
             const compteurs = [];
             if (compteursResult.length > 0) {
                 const columns = compteursResult[0].columns;
@@ -122,12 +122,17 @@ function calculerEtInsererConsommation() {
             
                 // Calculer les volumes pour l'enregistrement actuel
                 const currentVolumes = calculerVolumes(fournisseur, constructeur, row);
-                
+
                 // Si c'est le premier enregistrement pour cette machine
                 if (!prevRow) {
                     // Insérer une ligne pour le mois de cet enregistrement (statut = "Nouvelle")
                     statut = "Nouvelle";
                     //html += "*** Nouvelle<br>";
+                    // recherche du mois précédent
+                    const dt = new Date(currentAnnee, currentMois - 1, 1);
+                    dt.setMonth(dt.getMonth() - 1);
+                    // Formater au format YYYY-MM ('%Y-%m')
+                    const dtKpax = dt.toLocaleDateString('fr-CA', { year: 'numeric', month: '2-digit' });
 
                     result = db.run(
                         `INSERT OR REPLACE INTO consommation 
@@ -138,10 +143,10 @@ function calculerEtInsererConsommation() {
                             numero_de_serie,
                             constructeur,
                             modele,
-                            currentAnnee,
-                            currentMois,
-                            0, // Pas de consommation pour le premier mois
-                            0,
+                            dtKpax.split("-")[0],
+                            dtKpax.split("-")[1],
+                            currentVolumes.mono, // tout le volume pour la première "apparition"
+                            currentVolumes.couleur,
                             statut,
                             row.derniere_mise_a_jour
                         ]);
@@ -492,6 +497,9 @@ function traiteConsoUnMois(mois) {
                 derdate = precdate = false;
                 cptMono = cptCouleur = 0;
                 etat = "Eteinte";
+            }
+            if (compteur.numero_de_serie == '4601523412F6X') {
+                console.log("trouvé 4601523412F6X");
             }
             console.log("Appel de calculer volume avec ", compteur.constructeur, compteur);
             const cpt = calculerVolumes(compteur.fournisseur, compteur.constructeur, compteur);
