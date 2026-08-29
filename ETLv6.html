@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestion des données Kpax</title>
+
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Font Awesome pour les icônes -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Scripts existants -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <script src="script/initData.js"></script>
+    <script src="script/InsereDonnees.js"></script>
+    <script src="script/analyse.js"></script>
+    <script src="script/bdd.js"></script>
+    <script src="script/stats.js"></script>
+  
+
+    <link rel="stylesheet" href="styles/stylesEtl.css">
+
+ </head>
+<body>
+    <!-- En-tête -->
+    <header class="bg-success">
+        <h1>Gestion des données Kpax</h1>
+        <div class="kpi-container">
+            <div class="kpi-box">
+                <i class="fas fa-chart-line fa-2x"></i>
+                    <p><strong>Machines relevées en <spanid id="kpidt1"> -- </span></strong></p>
+                    <p><strong>Imp:</strong> 
+                    <span id="kpax-imprimantes">0</span> </p>
+                    <p><strong>Cop:</strong> 
+                    <span id="kpax-copieurs">0</span> </p>
+            </div>
+            <div class="kpi-box">
+                <i class="fas fa-chart-bar fa-2x"></i>
+                    <p><strong>Pages imprimées en <spanid id="kpidt2"> -- </span></strong></p>
+                    <p><strong>Ecole :</strong> Mono : <span id="ecole-mono">0</span> Couleur : <span id="ecole-mono">0</span>
+                    <p><strong>EMS : </strong> 
+            </div>
+            <div class="kpi-box">
+                <i class="fas fa-chart-pie fa-2x"></i>
+                <p>KPI 3</p>
+            </div>
+        </div>
+    </header>
+
+ <!-- Conteneur principal -->
+<div class="d-flex">
+    <!-- Menu latéral -->
+    <aside class="sidebar col-md-2">
+        <div class="sidebar-header">
+            <i class="fas fa-print"></i> &nbsp; ETL
+        </div>
+        <div class="sidebar-menu">
+            <a class="nav-item" onclick="switchView('loadCSV', event)">
+                <i class="fas fa-upload"></i> Import CSV
+            </a>
+            <div class="nav-divider"></div>
+            <a class="nav-item active" onclick="switchView('loadDB', event)">
+                <i class="fas fa-database"></i> Import DB
+            </a>
+            <a class="nav-item" onclick="switchView('Analyse', event)">
+                <i class="fas fa-chart-pie"></i> Analyse
+            </a>
+            <a class="nav-item" onclick="switchView('Conso', event)">
+                <i class="fas fa-microchip"></i> Calcule la consommation
+            </a>
+            <a class="nav-item" onclick="switchView('Stat', event)">
+                <i class="fas fa-chart-simple"></i> Statistiques
+            </a>
+        </div>
+    </aside>
+
+    <!-- Contenu principal -->
+    <main class="main-content col-md-10">
+        <!-- Section pour charger une base SQLite existante -->
+        <div id="loadDB" class="content-section" style="display: none;">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h2 class="mb-0"><i class="fas fa-database me-2"></i>Charger une base SQLite existante</h2>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="sqliteFile" class="form-label">Sélectionnez un fichier SQLite :</label>
+                            <input type="file" id="sqliteFile" class="form-control" accept=".sqlite,.db" />
+                        </div>
+                    </div>
+                    <button onclick="loadDatabase()" class="btn btn-primary">
+                        <i class="fas fa-upload me-2"></i>Charger la base
+                    </button>
+                </div>
+            </div>
+            <div class="result-container"></div>
+        </div>
+        <!-- Section pour importer un CSV -->
+        <div id="loadCSV" class="content-section">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h2 class="mb-0"><i class="fas fa-file-csv me-2"></i>Importer un fichier CSV</h2>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="csvFile" class="form-label">Sélectionnez un fichier CSV :</label>
+                            <input type="file" id="csvFile" class="form-control" accept=".csv" />
+                        </div>
+                        <div class="col-md-6">
+                            <label for="tableName" class="form-label">Nom de la table :</label>
+                            <input type="text" id="tableName" class="form-control" value="kpax" placeholder="Nom de la table" />
+                        </div>
+                        <div class="col-md-6">
+                            <label for="cptName" class="form-label">date compteurs :</label>
+                            <input type="text" id="cptName" class="form-control" value="AAAA-MM" placeholder="Date compteurs" />
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input type="checkbox" id="appendData" class="form-check-input" checked />
+                                <label for="appendData" class="form-check-label">Ajouter aux données existantes</label>
+                            </div>
+                        </div>
+                    </div>
+                    <button onclick="processCSV()" class="btn btn-primary">
+                        <i class="fas fa-plus me-2"></i>Ajouter/Importer
+                    </button>
+                </div>
+            </div>
+            <div class="result-container"></div>
+        </div>
+        <!-- Section pour le requêtage -->
+        <div id="Analyse" class="content-section" style="display: none;">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h2 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Requêtes et Analyse</h2>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <label for="date_deb" class="form-label">Date de début :</label>
+                            <select id="date_deb" class="form-select"></select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="date_fin" class="form-label">Date de fin :</label>
+                            <select id="date_fin" class="form-select"></select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="d_modele" class="form-label">Modèle :</label>
+                            <select id="d_modele" class="form-select"></select>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input type="checkbox" id="detailPages" class="form-check-input" />
+                                <label for="detailPages" class="form-check-label">Détail des compteurs</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button onclick="groupModele()" class="btn btn-primary">
+                            <i class="fas fa-search me-2"></i>Analyser
+                        </button>
+                        <button onclick="PagesImprimees3()" class="btn btn-secondary">
+                            <i class="fas fa-print me-2"></i>Pages Imprimées
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="result-container"></div>
+        </div>
+        <!-- Section pour le calcul de la consommation vers la table conso -->
+        <div id="Conso" class="content-section" style="display: none;">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h2 class="mb-0"><i class="fas fa-microchip me-2"></i>Calcul de la consommation</h2>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <!--label for="date_deb" class="form-label">Date de début :</label>
+                            <select id="date_deb" class="form-select"></select-->
+                            A détailler
+                        </div>
+                     </div>
+                    <div class="d-flex gap-2 mb-3">
+                        <button onclick="calculerEtInsererConsommation()" class="btn btn-primary">
+                            <i class="fas fa-search me-2"></i>Calcul de toute la consommation
+                        </button>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button onclick="afficherDernierMoisManquantGlobal()" class="btn btn-primary">
+                            <i class="fas fa-search me-2"></i>Vérif des consos manquantes
+                        </button>
+                        <button onclick="traiteConsoMoisManquants()" class="btn btn-primary">
+                            <i class="fas fa-search me-2"></i>Calcul des consos manquantes
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="result-container"></div>
+        </div>
+       <!-- Section pour les stats -->
+        <div id="Stat" class="content-section" style="display: none;">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h2 class="mb-0"><i class="fas fa-chart-simple me-2"></i>Statistiques</h2>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <label for="date_debs" class="form-label">Date de début :</label>
+                            <select id="date_debs" class="form-select"></select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="date_fins" class="form-label">Date de fin :</label>
+                            <select id="date_fins" class="form-select"></select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="d_modeles" class="form-label">Modèle :</label>
+                            <select id="d_modeles" class="form-select"></select>
+                        </div>
+                    </div>
+                    <!--div class="row mb-3">
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input type="checkbox" id="detailPages" class="form-check-input" />
+                            </div>
+                        </div>
+                    </div-->
+                    <div class="d-flex gap-2">
+                        <button onclick="afficheStats()" class="btn btn-primary">
+                            <i class="fas fa-search me-2"></i>Affiche les stats
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div id="charts-container">
+                <!-- Les graphiques seront insérés ici dynamiquement -->
+            </div>
+            <div class="result-container"></div>
+        </div>
+
+    </main>
+</div>
+
+<!-- Script pour basculer entre les sections -->
+<script>
+
+    function switchView(viewName, event) {
+    // Masquer toutes les sections
+    const sections = document.querySelectorAll('.content-section');
+    sections.forEach(section => {
+        section.style.display = 'none';
+    });
+
+    // Afficher la section sélectionnée
+    const selectedSection = document.getElementById(viewName);
+    if (selectedSection) {
+        selectedSection.style.display = 'block';
+    }
+
+    // Mettre à jour l'élément actif du menu (seulement si event existe)
+    if (event) {
+        const navItems = document.querySelectorAll('.nav-item');
+        
+        navItems.forEach(item => {
+            item.classList.remove('active');
+        });
+        event.target.classList.add('active');
+    }
+}
+    // function switchView(viewName) {
+    //     // Masquer toutes les sections
+    //     const sections = document.querySelectorAll('.content-section');
+    //     sections.forEach(section => {
+    //         section.style.display = 'none';
+    //     });
+
+    //     // Afficher la section sélectionnée
+    //     const selectedSection = document.getElementById(viewName);
+    //     if (selectedSection) {
+    //         selectedSection.style.display = 'block';
+    //     }
+
+    //     // Mettre à jour l'élément actif du menu
+    //     const navItems = document.querySelectorAll('.nav-item');
+    //     navItems.forEach(item => {
+    //         item.classList.remove('active');
+    //     });
+    //     event.target.classList.add('active');
+    // }
+
+    // Afficher la section par défaut au chargement
+    document.addEventListener('DOMContentLoaded', () => {
+        switchView('loadDB');
+        // 2. Ajoute l'écouteur pour l'input csvFile
+        const csvFileInput = document.getElementById('csvFile');
+        if (csvFileInput) {
+            csvFileInput.addEventListener('change', function(event) {
+                const file = event.target.files[0];
+                if (file) {
+                    console.log("Fichier CSV sélectionné :", file.name);
+                    initDateCompteurs(file); // Appelle ta fonction de traitement
+                }
+            });
+        }
+    });
+
+    function displayResults(data, sectionId) {
+        const resultContainer = document.querySelector(`#${sectionId} .result-container`);
+        if (resultContainer) {
+            resultContainer.innerHTML = data; // Fonction pour formater les données en tableau
+        }
+    }
+</script>
+    <div id="output"></div>
+        </main>
+    </div>
+
+    <!-- Bootstrap 5 JS (optionnel, pour les composants interactifs) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

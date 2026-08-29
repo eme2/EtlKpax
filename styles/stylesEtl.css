@@ -1,0 +1,119 @@
+    body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+        overflow-x: hidden;
+    }
+
+    /* En-tête personnalisé */
+    header {
+        background-color: #28a745; /* Vert Bootstrap */
+        color: white;
+        padding: 1rem;
+        text-align: center;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Menu latéral */
+    .sidebar {
+        height: calc(100vh - 70px); /* Hauteur totale moins l'en-tête */
+        background-color: #f8f9fa;
+        border-right: 1px solid #dee2e6;
+        padding: 1rem;
+        position: sticky;
+        top: 70px; /* Hauteur de l'en-tête */
+        overflow-y: auto;
+    }
+
+    .sidebar-header {
+        font-weight: bold;
+        margin-bottom: 1rem;
+        padding: 0.5rem;
+        background-color: #e9ecef;
+        border-radius: 0.25rem;
+    }
+
+    .nav-item {
+        padding: 0.5rem;
+        margin: 0.25rem 0;
+        border-radius: 0.25rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        color: #495057;
+        text-decoration: none;
+    }
+
+    .nav-item:hover {
+        background-color: #e9ecef;
+    }
+
+    .nav-item.active {
+        background-color: #28a745;
+        color: white;
+    }
+
+    .nav-item i {
+        margin-right: 0.5rem;
+    }
+
+    .nav-divider {
+        height: 1px;
+        background-color: #dee2e6;
+        margin: 0.5rem 0;
+    }
+
+    /* Contenu principal */
+    .main-content {
+        padding: 1rem;
+        overflow-y: auto;
+    }
+
+    /* KPI */
+    .kpi-container {
+        display: flex;
+        justify-content: space-around;
+        margin: 1rem 0;
+    }
+
+    .kpi-box {
+        background-color: white;
+        color: black;
+        padding: 1rem;
+        border-radius: 0.25rem;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        text-align: center;
+        flex: 1;
+        margin: 0 0.5rem;
+    }
+
+    /* charts */
+    
+#stats-form {
+  margin: 20px;
+  padding: 20px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  background-color: #f9f9f9;
+}
+
+#charts-container {
+  margin: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.source-charts {
+  flex: 1;
+  min-width: 500px;
+  margin-bottom: 20px;
+  border: 1px solid #eee;
+  padding: 15px;
+  border-radius: 5px;
+}
+
+canvas {
+  max-width: 100%;
+  height: 300px;
+}
