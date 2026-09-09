@@ -56,6 +56,9 @@ function calculerEtInsererConsommation() {
         
         html += `Trouvé ${machines.length} machines dans la base de données.<p>`;
 
+        // 701725140XP3R
+        // Cette machine n'a pas de conso avant Août.
+        // C359P600643 : passée d'EMS à Ecole
 
         // 2. Pour chaque machine, récupérer ses enregistrements triés par date
         for (const machine of machines) {
@@ -85,9 +88,9 @@ function calculerEtInsererConsommation() {
                 }
 
             const compteursResult = db.exec(query, [numero_de_serie, source]);
-            // if (numero_de_serie == '3100R412455' || numero_de_serie == '4601523412F6X') {
-            //     console.log("Trouvé machine cherchée")
-            // }
+            if (numero_de_serie == 'C359P600643') {
+                console.log("Trouvé machine cherchée")
+            }
             const compteurs = [];
             if (compteursResult.length > 0) {
                 const columns = compteursResult[0].columns;
@@ -156,6 +159,13 @@ function calculerEtInsererConsommation() {
                 else if (currentMois !== prevMois || currentAnnee !== prevAnnee) {
                     //html += "*** Existante<br>";
                     // Calculer la consommation pour le mois précédent
+                    if ((currentVolumes.mono == 0) || (currentVolumes.mono == '')) {
+                        currentVolumes.mono = prevVolumes.mono;
+                    }
+                    if ((currentVolumes.couleur == 0) || (currentVolumes.couleur == '')) {
+                        currentVolumes.couleur = prevVolumes.couleur;
+                    }
+ 
                     const volumeMono = currentVolumes.mono - prevVolumes.mono;
                     const volumeCouleur = currentVolumes.couleur - prevVolumes.couleur;
                     statut = volumeMono > 0 || volumeCouleur > 0 ? "Active" : "Éteinte";

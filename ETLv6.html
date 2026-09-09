@@ -18,7 +18,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
     <script src="script/initData.js"></script>
-    <script src="script/InsereDonnees.js"></script>
+    <script src="script/conso_fusionne.js"></script>
     <script src="script/analyse.js"></script>
     <script src="script/bdd.js"></script>
     <script src="script/stats.js"></script>
@@ -43,8 +43,8 @@
             <div class="kpi-box">
                 <i class="fas fa-chart-bar fa-2x"></i>
                     <p><strong>Pages imprimées en <spanid id="kpidt2"> -- </span></strong></p>
-                    <p><strong>Ecole :</strong> Mono : <span id="ecole-mono">0</span> Couleur : <span id="ecole-mono">0</span>
-                    <p><strong>EMS : </strong> 
+                    <p><strong>Ecole :</strong> Mono : <span id="ecole-mono">0</span> Couleur : <span id="ecole-coul">0</span>
+                    <p><strong>EMS : </strong> Mono : <span id="ems-mono">0</span> Couleur : <span id="ems-coul">0</span>
             </div>
             <div class="kpi-box">
                 <i class="fas fa-chart-pie fa-2x"></i>
@@ -194,15 +194,15 @@
                         </div>
                      </div>
                     <div class="d-flex gap-2 mb-3">
-                        <button onclick="calculerEtInsererConsommation()" class="btn btn-primary">
+                        <button onclick="calculerConsommation(true)" class="btn btn-primary">
                             <i class="fas fa-search me-2"></i>Calcul de toute la consommation
                         </button>
                     </div>
                     <div class="d-flex gap-2">
-                        <button onclick="afficherDernierMoisManquantGlobal()" class="btn btn-primary">
+                        <!--button onclick="afficherDernierMoisManquantGlobal()" class="btn btn-primary">
                             <i class="fas fa-search me-2"></i>Vérif des consos manquantes
-                        </button>
-                        <button onclick="traiteConsoMoisManquants()" class="btn btn-primary">
+                        </button-->
+                        <button onclick="calculerConsommation(false)" class="btn btn-primary">
                             <i class="fas fa-search me-2"></i>Calcul des consos manquantes
                         </button>
                     </div>
