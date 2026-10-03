@@ -242,27 +242,20 @@ function loadKPI() {
     // der_date : la dernière date dans les consos au format YYYY-MM
 
     const precTrim = trimestrePrecedentDate(der_date);
-    console.log("Derdate > ", precTrim.deb, precTrim.fin, precTrim.numTrim);
 
     document.getElementById('kpidt2').innerHTML = precTrim.numTrim;
-    console.log("KPI 2 : pages imprimées dernier trimestre : ", precTrim.deb, precTrim.fin, precTrim.numTrim);
     [annee_deb, mois_deb] = precTrim.deb.split('-');
     [annee_fin, mois_fin] = precTrim.fin.split('-');
-    console.log("Mois de fin : ", mois_fin, annee_fin);
-    console.log("Avant recherche dans la table consommation : ", annee_deb, mois_deb, mois_fin);
     const vol_trimestre = db.exec(`select source, sum(volume_pages_mono), sum(volume_pages_couleur)
                                     from consommation
                                     where annee == ? and mois >= ? and mois < ?
                                     group by source`,[annee_deb, mois_deb, mois_fin]);
-    console.log("KPI 2 : pages imprimées dernier trimestre : ", vol_trimestre);
     if (vol_trimestre) {
         let mono_ecole = 0, coul_ecole = 0;
         let mono_ems = 0, coul_ems = 0;
 
-        console.log("KPI 2 : pages imprimées dernier trimestre : ", vol_trimestre[0].columns, vol_trimestre[0].values);
         const h_machine = vol_trimestre[0].columns;
         const v_machine = vol_trimestre[0].values;
-        console.log("KPI 2 : pages imprimées dernier trimestre : ", v_machine);
         for (row of v_machine) {
             if (row[0] == 'ECOLE') {
                 mono_ecole += row[1];
@@ -273,8 +266,6 @@ function loadKPI() {
             }
         }  // fin du for row of v_machine
 
-        //let kpi = `Ecole ${mono_ecole} (mono) / ${coul_ecole} (couleur) EMS ${mono_ems} (mono) / ${coul_ems} (couleur)`;
-        
         document.getElementById('ecole-mono').innerHTML = mono_ecole.toLocaleString('fr-FR');
         document.getElementById('ecole-coul').innerHTML = coul_ecole.toLocaleString('fr-FR');
         document.getElementById('ems-mono').innerHTML = mono_ems.toLocaleString('fr-FR');

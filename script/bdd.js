@@ -321,9 +321,12 @@ function addDataToTable(tableName, columns, columnTypes, data, appendData) {
 
         let insertedRows = 0;
         data.forEach(row => {
-            const values = columns.map(col => row[col] !== undefined ? row[col] : null);
-            insertStmt.run(values);
-            insertedRows++;
+            if (row['profil'] == 'Géré' || row['fournisseur'] == 'SCC') 
+            {
+                const values = columns.map(col => row[col] !== undefined ? row[col] : null);
+                insertStmt.run(values);
+                insertedRows++;
+            }
         });
 
         document.getElementById('output').innerHTML +=
