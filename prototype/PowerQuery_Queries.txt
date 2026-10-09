@@ -1,0 +1,152 @@
+================================================================================
+PROTOTYPE ETL KPAX AVEC POWER QUERY
+================================================================================
+
+Ce fichier contient toutes les requetes Power Query (langage M) a creer dans Excel.
+
+INSTRUCTIONS:
+1. Ouvrez le fichier ETL_Kpax_Prototype.xlsx
+2. Allez dans l'onglet "Donnees"
+3. Cliquez sur "Obtenir des donnees" > "A partir d'autres sources" > "A partir d'une requete vide"
+4. Dans l'editeur Power Query, copiez-collez chaque requete ci-dessous
+5. Renommez chaque requete selon son nom
+6. Cliquez sur "Fermer et charger" pour chaque requete
+
+================================================================================
+REQUETE 1: Import_Kpax
+================================================================================
+
+Nom: Import_Kpax
+Description: Import et nettoyage des donnees brutes Kpax
+
+Code M:
+let
+    Source = Excel.CurrentWorkbook(){[Name="kpax_source"]}[Content],
+    TypeModified = Table.TransformColumnTypes(Source,{{
+        {"source", type text},
+        {"fournisseur", type text},
+        {"dateCompteurs", type text},
+        {"constructeur", type text},
+        {"modele", type text},
+        {"numero_de_serie", type text},
+        {"derniere_mise_a_jour", type date},
+        {"compteur_machine", Int64.Type},
+        {"total_mono", Int64.Type},
+        {"total_couleur", Int64.Type},
+        {"mono_a4", Int64.Type},
+        {"couleur_a4", Int64.Type},
+        {"mono_recto_a4", Int64.Type},
+        {"mono_r_v_a4", Int64.Type},
+        {"mono_recto_a3", Int64.Type},
+        {"mono_r_v_a3", Int64.Type},
+        {"couleur_recto_a4", Int64.Type},
+        {"couleur_r_v_a4", Int64.Type},
+        {"couleur_recto_a3", Int64.Type},
+        {"couleur_r_v_a3", Int64.Type},
+        {"profil", type text}
+    }),
+    FilteredRows = Table.SelectRows(TypeModified, each [profil] = "Gere" or [fournisseur] = "SCC")
+in
+    FilteredRows
+
+================================================================================
+REQUETE 2: Calcul_Consommation
+================================================================================
+
+Nom: Calcul_Consommation
+Description: Calcul de la consommation mensuelle par machine
+Depend de: Import_Kpax
+
+Code M:
+let
+    Source = Import_Kpax,
+    Filtered = Table.SelectRows(Source, each [numero_de_serie] <> null and Text.Length([numero_de_serie]) >= 5),
+    Sorted = Table.Sort(Filtered,{{{"numero_de_serie", Order.Ascending}, {"dateCompteurs", Order.Ascending}}}),
+    AddedYear = Table.AddColumn(Sorted, "annee", each Text.Start([dateCompteurs], 4)),
+    AddedMonth = Table.AddColumn(AddedYear, "mois", each Text.End([dateCompteurs], 2)),
+    TypeYearMonth = Table.TransformColumnTypes(AddedMonth,{{{"annee", Int64.Type}, {"mois", Int64.Type}}}),
+    AddedMonoValue = Table.AddColumn(TypeYearMonth, "mono_value", each
+        if [constructeur] = "Brother" then
+            [mono_recto_a4] + [mono_r_v_a4] + 2 * ([mono_recto_a3] + [mono_r_v_a3])
+        else if [constructeur] = "Ricoh" then
+            if [source] = "EMS" then [total_mono] else [compteur_machine]
+        else if [constructeur] = "Lexmark" then
+            if [source] = "EMS" then [mono_a4] else [total_mono]
+        else
+            0
+    ),
+    AddedCouleurValue = Table.AddColumn(AddedMonoValue, "couleur_value", each
+        if [constructeur] = "Brother" then
+            [couleur_recto_a4] + [couleur_r_v_a4] + 2 * ([couleur_recto_a3] + [couleur_r_v_a3])
+        else if [constructeur] = "Ricoh" then
+            if [source] = "EMS" then [total_couleur] else 0
+        else if [constructeur] = "Lexmark" then
+            if [source] = "EMS" then [couleur_a4] else [total_couleur]
+        else
+            0
+    ),
+    Indexed = Table.AddIndexColumn(AddedCouleurValue, "Index", 0, 1),
+    WithPrevMono = Table.AddColumn(Indexed, "prev_mono", each
+        if [Index] = 0 then null else Table.SelectRows(Indexed, each [Index] = [Index]-1){0}[mono_value]
+    ),
+    WithPrevCouleur = Table.AddColumn(WithPrevMono, "prev_couleur", each
+        if [Index] = 0 then null else Table.SelectRows(WithPrevMono, each [Index] = [Index]-1){0}[couleur_value]
+    ),
+    WithVolumeMono = Table.AddColumn(WithPrevCouleur, "volume_pages_mono", each
+        if [prev_mono] = null then [mono_value] else [mono_value] - [prev_mono]
+    ),
+    WithVolumeCouleur = Table.AddColumn(WithVolumeMono, "volume_pages_couleur", each
+        if [prev_couleur] = null then [couleur_value] else [couleur_value] - [prev_couleur]
+    ),
+    FilteredVolumes = Table.SelectRows(WithVolumeCouleur, each [volume_pages_mono] > 0 or [volume_pages_couleur] > 0),
+    WithStatut = Table.AddColumn(FilteredVolumes, "statut", each
+        if [Index] = 0 then "Nouvelle"
+        else if [volume_pages_mono] > 0 or [volume_pages_couleur] > 0 then "Active"
+        else "Eteinte"
+    ),
+    Result = Table.SelectColumns(WithStatut,{
+        "source", "fournisseur", "numero_de_serie", "constructeur", "modele",
+        "annee", "mois", "volume_pages_mono", "volume_pages_couleur", "statut", "derniere_mise_a_jour"
+    }),
+    Renamed = Table.RenameColumns(Result,{{{"derniere_mise_a_jour", "date_releve"}}})
+in
+    Renamed
+
+================================================================================
+REQUETE 3: Aggregation_Stats
+================================================================================
+
+Nom: Aggregation_Stats
+Description: Aggregation des statistiques par source, annee et mois
+Depend de: Calcul_Consommation
+
+Code M:
+let
+    Source = Calcul_Consommation,
+    Grouped = Table.Group(Source, {"source", "annee", "mois"}, {
+        {"volume_pages_mono", each List.Sum([volume_pages_mono]), type number},
+        {"volume_pages_couleur", each List.Sum([volume_pages_couleur]), type number}
+    }),
+    Sorted = Table.Sort(Grouped, {
+        {"annee", Order.Ascending},
+        {"mois", Order.Ascending},
+        {"source", Order.Ascending}
+    }),
+    AddedMonthYear = Table.AddColumn(Sorted, "mois_annee", each
+        Text.From([annee]) & "-" & Text.PadStart(Text.From([mois]), 2, "0")
+    )
+in
+    AddedMonthYear
+
+================================================================================
+REQUETE 4: KPI_Machines
+================================================================================
+
+Nom: KPI_Machines
+Description: Calcul des KPI pour le tableau de bord
+Depend de: Import_Kpax
+
+Code M:
+let
+    Source = Import_Kpax,
+    MaxDateQuery = Table.Aggregate(Source, {{
