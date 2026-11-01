@@ -183,9 +183,24 @@ function vueControles(el) {
     // Machines absentes du dernier relevé de leur lot (retirées ? panne ? non remontées ?)
     const absentes = q(`WITH der AS (SELECT fournisseur, source, MAX(dateCompteurs) AS d FROM kpax GROUP BY fournisseur, source),
                         mach AS (SELECT upper(replace(trim(numero_de_serie),' ','')) AS serie, fournisseur, source, MAX(dateCompteurs) AS d,
-                                 MAX(modele) AS modele, MAX(constructeur) AS constructeur FROM kpax GROUP BY 1)
+                                 MAX(modele) AS modele, MAX(constructeur) AS constructeur FROM kpax GROUP BY 1, fournisseur)
                         SELECT mach.* FROM mach JOIN der ON der.fournisseur = mach.fournisseur AND der.source = mach.source
                         WHERE mach.d < der.d AND mach.d >= ? AND length(mach.serie) >= 5 ORDER BY mach.d DESC`, [decalerMois(periodeControles, -1)]);
+    // Machines présentes chez les deux fournisseurs au dernier relevé de chacun : risque de double facturation
+    const SERIE = "upper(replace(trim(numero_de_serie),' ',''))";
+    const doubles = q(`WITH der AS (SELECT fournisseur, MAX(dateCompteurs) AS d FROM kpax GROUP BY fournisseur),
+                       actu AS (SELECT ${SERIE} AS serie, k.fournisseur, k.source, k.modele, k.constructeur, k.dateCompteurs AS d
+                                FROM kpax k JOIN der ON der.fournisseur = k.fournisseur AND der.d = k.dateCompteurs
+                                WHERE length(trim(k.numero_de_serie)) >= 5)
+                       SELECT serie, MAX(constructeur) AS constructeur, MAX(modele) AS modele,
+                              group_concat(fournisseur || ' (' || source || ', ' || d || ')', ' + ') AS ou
+                       FROM actu GROUP BY serie HAVING COUNT(DISTINCT fournisseur) > 1 ORDER BY serie`);
+    // Machines signalées déconnectées dans Kpax au dernier relevé (compteur potentiellement figé)
+    const deconnectees = colonnesDe('kpax').includes('est_deconnecte') ? q(`
+                       WITH der AS (SELECT fournisseur, source, MAX(dateCompteurs) AS d FROM kpax GROUP BY fournisseur, source)
+                       SELECT ${SERIE} AS serie, k.fournisseur, k.source, k.constructeur, k.modele, k.derniere_mise_a_jour AS maj
+                       FROM kpax k JOIN der ON der.fournisseur = k.fournisseur AND der.source = k.source AND der.d = k.dateCompteurs
+                       WHERE lower(k.est_deconnecte) = 'oui' ORDER BY serie`) : [];
     // Machines lues avec la règle par défaut
     const defaut = q(`SELECT fournisseur, constructeur, COUNT(DISTINCT numero_de_serie) AS n FROM kpax GROUP BY fournisseur, constructeur`)
         .filter(r => compteursReleve({ fournisseur: r.fournisseur, constructeur: r.constructeur }).regle === 'défaut');
@@ -198,6 +213,13 @@ function vueControles(el) {
             <div class="col-auto"><label class="form-label small">Depuis le mois</label>
             <select class="form-select form-select-sm" onchange="periodeControles=this.value;afficherVue('controles')">${optionsHTML(periodes.map(p => [p, libMois(p)]), periodeControles)}</select></div>
         </div></div>
+        ${doubles.length ? `<div class="carte border-danger"><h3 class="text-danger"><i class="fas fa-clone me-2"></i>Machines présentes chez les deux fournisseurs</h3>
+        ${tableHTML('t-doubles', [
+            { k: 'serie', t: 'N° de série', html: lienMachine }, { k: 'constructeur', t: 'Constructeur' }, { k: 'modele', t: 'Modèle' },
+            { k: 'ou', t: 'Relevée chez' },
+        ], doubles, { nomFichier: 'machines_deux_fournisseurs' })}
+        <p class="aide mt-2 mb-0">Même n° de série dans le dernier export SCC et dans le dernier export EMC (profil « Géré ») :
+        transfert en cours ou double gestion. Vérifiez qu'elle n'est pas facturée par les deux.</p></div>` : ''}
         <div class="carte"><h3>Consommations inhabituelles</h3>
         ${tableHTML('t-controles', [
             { k: 'periode', t: 'Mois', html: l => esc(libMois(l.periode)) },
@@ -216,6 +238,12 @@ function vueControles(el) {
             { k: 'constructeur', t: 'Constructeur' }, { k: 'modele', t: 'Modèle' }, { k: 'd', t: 'Dernier relevé', html: l => esc(libMois(l.d)) },
         ], absentes, { vide: 'Aucune.', nomFichier: 'machines_absentes' })}
         <p class="aide mt-2 mb-0">Machine retirée, en panne ou qui ne remonte plus dans Kpax : à signaler au fournisseur si elle est encore facturée.</p></div>
+        ${deconnectees.length ? `<div class="carte"><h3>Machines déconnectées dans Kpax</h3>
+        ${tableHTML('t-deconnectees', [
+            { k: 'serie', t: 'N° de série', html: lienMachine }, { k: 'source', t: 'Source' }, { k: 'fournisseur', t: 'Fournisseur' },
+            { k: 'constructeur', t: 'Constructeur' }, { k: 'modele', t: 'Modèle' }, { k: 'maj', t: 'Dernière mise à jour' },
+        ], deconnectees, { nomFichier: 'machines_deconnectees' })}
+        <p class="aide mt-2 mb-0">Kpax indique « Est déconnecté = Oui » au dernier relevé : le compteur peut être figé, la consommation sera rattrapée à la reconnexion.</p></div>` : ''}
         ${defaut.length ? `<div class="carte"><h3>Constructeurs sans règle spécifique</h3>
             <p class="small">Compteurs lus avec la règle par défaut (<code>total_mono</code> / <code>total_couleur</code>). À valider avec la facture du fournisseur
             (règles modifiables dans <code>script/regles.js</code>).</p>

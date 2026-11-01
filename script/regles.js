@@ -32,8 +32,9 @@ const REGLES_COMPTEURS = {
             : { mono: num(r.total_mono), couleur: num(r.total_couleur) },
     },
     EMC: {
-        // À compléter dès réception de la première facture EMC-Konica.
-        // En attendant, la règle par défaut (total_mono / total_couleur) s'applique.
+        // L'export EMC ne fournit que compteur_machine, total_mono et total_couleur
+        // (compteur_machine = mono + couleur). La règle par défaut
+        // (total_mono / total_couleur) s'applique, à confirmer avec la 1re facture EMC.
     },
 };
 

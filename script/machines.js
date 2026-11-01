@@ -37,35 +37,44 @@ function vueMachines(el, params) {
     rendreListeCorrections();
 }
 
+function historiquesMachine(serie) {
+    const { historiques } = construireHistoriques(lireReleves(serie), lireCorrections());
+    return [...historiques.values()].filter(h => h.serie === serie);
+}
+
 function rendreMachine(serie) {
     const el = document.getElementById('m-detail');
-    const { historiques } = construireHistoriques(lireReleves(serie), lireCorrections());
-    const pts = historiques.get(serie);
-    if (!pts) { el.innerHTML = alerte('warning', `Aucun relevé pour le n° de série « ${esc(serie)} ».`); return; }
-    const conso = new Map(q('SELECT * FROM consommation WHERE numero_de_serie=?', [serie]).map(c => [c.periode, c]));
-    const der = pts[pts.length - 1];
-
-    // Une ligne par relevé ; la consommation affichée est celle du mois du relevé
-    const lignes = pts.slice().reverse().map(p => {
-        const c = conso.get(p.date) || null;
-        return {
-            date: p.date, source: p.source, regle: p.regle,
-            kpaxMono: p.kpaxMono, kpaxCouleur: p.kpaxCouleur,
-            mono: p.mono, couleur: p.couleur, correction: p.correction,
-            volMono: c ? c.volume_pages_mono : null, volCouleur: c ? c.volume_pages_couleur : null,
-            statut: c ? c.statut : '', detail: c ? c.detail : '',
-        };
-    });
-    const nouvelle = conso.get(decalerMois(pts[0].date, -1));
-
-    el.innerHTML = `<div class="carte">
+    const hists = historiquesMachine(serie);
+    if (!hists.length) { el.innerHTML = alerte('warning', `Aucun relevé pour le n° de série « ${esc(serie)} ».`); return; }
+    let h = '';
+    if (hists.length > 1) {
+        h += alerte('danger', `<i class="fas fa-triangle-exclamation me-1"></i>Cette machine apparaît chez <b>${hists.map(x => esc(x.fournisseur)).join(' et ')}</b>.
+            Vérifiez qu'elle n'est pas facturée deux fois (et indiquez le fournisseur concerné dans une éventuelle correction).`);
+    }
+    hists.forEach((hist, i) => {
+        const pts = hist.pts;
+        const conso = new Map(q('SELECT * FROM consommation WHERE numero_de_serie=? AND fournisseur=?', [serie, hist.fournisseur]).map(c => [c.periode, c]));
+        const der = pts[pts.length - 1];
+        // Une ligne par relevé ; la consommation affichée est celle du mois du relevé
+        const lignes = pts.slice().reverse().map(p => {
+            const c = conso.get(p.date) || null;
+            return {
+                date: p.date, source: p.source, regle: p.regle, fournisseur: hist.fournisseur,
+                kpaxMono: p.kpaxMono, kpaxCouleur: p.kpaxCouleur,
+                mono: p.mono, couleur: p.couleur, correction: p.correction,
+                volMono: c ? c.volume_pages_mono : null, volCouleur: c ? c.volume_pages_couleur : null,
+                statut: c ? c.statut : '', detail: c ? c.detail : '',
+            };
+        });
+        const nouvelle = conso.get(decalerMois(pts[0].date, -1));
+        h += `<div class="carte">
         <h3>${esc(serie)} — ${esc(der.constructeur)} ${esc(der.modele)}</h3>
         <p class="small mb-2">Source <b>${esc(der.source)}</b> · fournisseur <b>${esc(der.fournisseur)}</b> · ${esc(typeMachine(der.constructeur))}
             · règle de lecture : <code>${esc(der.regle || '—')}</code></p>
         ${nouvelle ? alerte('warning', `Machine comptée comme <b>nouvelle</b> : ${nf(nouvelle.volume_pages_mono)} pages mono / ${nf(nouvelle.volume_pages_couleur)} couleur
             imputées sur ${esc(libMois(nouvelle.periode))}. Si la machine n'était pas neuve, saisissez une correction sur le relevé de
             ${esc(libMois(pts[0].date))} (même compteur) : il deviendra le point de départ.`) : ''}
-        ${tableHTML('t-machine', [
+        ${tableHTML('t-machine-' + i, [
             { k: 'date', t: 'Relevé', html: l => esc(libMois(l.date)) },
             { k: 'source', t: 'Source' },
             { k: 'kpaxMono', t: 'Kpax mono', type: 'n' }, { k: 'kpaxCouleur', t: 'Kpax couleur', type: 'n' },
@@ -76,15 +85,18 @@ function rendreMachine(serie) {
             { k: 'statut', t: 'Statut', html: l => l.statut ? `<span class="badge text-bg-${STATUTS_A_VERIFIER.includes(l.statut) ? 'warning' : 'light'}" title="${esc(l.detail)}">${esc(l.statut)}</span>` : '' },
             { k: 'correction', t: 'Correction', export: false, html: l => l.correction
                 ? `<span title="${esc(l.correction.commentaire)}"><i class="fas fa-pen text-primary"></i> ${esc(l.correction.commentaire || '')}</span>
-                   <button class="btn btn-sm btn-link" onclick="preparerCorrection('${l.date}')">modifier</button>`
-                : `<button class="btn btn-sm btn-link" onclick="preparerCorrection('${l.date}')">corriger</button>` },
-        ], lignes, { nomFichier: 'machine_' + serie })}
+                   <button class="btn btn-sm btn-link" onclick="preparerCorrection('${l.date}','${esc(l.fournisseur)}')">modifier</button>`
+                : `<button class="btn btn-sm btn-link" onclick="preparerCorrection('${l.date}','${esc(l.fournisseur)}')">corriger</button>` },
+        ], lignes, { nomFichier: `machine_${serie}_${hist.fournisseur}` })}
         <p class="aide mt-2 mb-0">Conso du mois = compteur du relevé suivant − compteur de ce relevé. En gras bleu : compteur corrigé.</p>
-        </div>
-        <div class="carte" id="m-form">
+        </div>`;
+    });
+    const fours = hists.map(x => [x.fournisseur, x.fournisseur]);
+    h += `<div class="carte" id="m-form">
             <h3>Ajouter / modifier une correction</h3>
             <div class="row g-2 align-items-end">
                 <div class="col-auto"><label class="form-label small">Relevé (AAAA-MM)</label><input class="form-control form-control-sm" id="cor-date" style="width:8rem" placeholder="AAAA-MM"></div>
+                ${hists.length > 1 ? `<div class="col-auto"><label class="form-label small">Fournisseur</label><select class="form-select form-select-sm" id="cor-four">${optionsHTML(fours, '', 'Tous')}</select></div>` : ''}
                 <div class="col-auto"><label class="form-label small">Compteur mono</label><input class="form-control form-control-sm" id="cor-mono" inputmode="numeric" placeholder="inchangé"></div>
                 <div class="col-auto"><label class="form-label small">Compteur couleur</label><input class="form-control form-control-sm" id="cor-coul" inputmode="numeric" placeholder="inchangé"></div>
                 <div class="col"><label class="form-label small">Motif (obligatoire)</label><input class="form-control form-control-sm" id="cor-com" placeholder="ex. : index facture SCC T1 2026"></div>
@@ -93,12 +105,15 @@ function rendreMachine(serie) {
             <p class="aide mt-2 mb-0">Saisissez le <b>compteur cumulé</b> (pas un volume). Laisser vide = conserver la valeur Kpax.
             Un relevé absent de Kpax peut être ajouté en saisissant un mois sans relevé.</p>
         </div>`;
+    el.innerHTML = h;
 }
 
-function preparerCorrection(date) {
-    const pts = construireHistoriques(lireReleves(serieCourante), lireCorrections()).historiques.get(serieCourante) || [];
-    const p = pts.find(x => x.date === date);
+function preparerCorrection(date, fournisseur) {
+    const hist = historiquesMachine(serieCourante).find(x => x.fournisseur === fournisseur);
+    const p = hist ? hist.pts.find(x => x.date === date) : null;
     document.getElementById('cor-date').value = date;
+    const four = document.getElementById('cor-four');
+    if (four) four.value = p && p.correction ? (p.correction.fournisseur || '') : fournisseur;
     document.getElementById('cor-mono').value = p && p.correction && p.correction.compteur_mono !== null ? p.correction.compteur_mono : (p && p.kpaxMono) ?? '';
     document.getElementById('cor-coul').value = p && p.correction && p.correction.compteur_couleur !== null ? p.correction.compteur_couleur : (p && p.kpaxCouleur) ?? '';
     document.getElementById('cor-com').value = p && p.correction ? p.correction.commentaire || '' : '';
@@ -108,18 +123,19 @@ function preparerCorrection(date) {
 
 async function enregistrerCorrection(serie) {
     const date = document.getElementById('cor-date').value.trim();
+    const four = document.getElementById('cor-four') ? document.getElementById('cor-four').value || null : null;
     const mono = num(document.getElementById('cor-mono').value);
     const coul = num(document.getElementById('cor-coul').value);
     const com = document.getElementById('cor-com').value.trim();
     if (!estPeriode(date)) return toast('Mois du relevé invalide (format AAAA-MM).', 'erreur');
     if (mono === null && coul === null) return toast('Saisir au moins un compteur.', 'erreur');
     if (!com) return toast('Indiquez le motif de la correction (traçabilité).', 'erreur');
-    run(`INSERT INTO corrections (numero_de_serie, date_compteurs, compteur_mono, compteur_couleur, commentaire, cree_le)
-         VALUES (?,?,?,?,?,?)
+    run(`INSERT INTO corrections (numero_de_serie, date_compteurs, compteur_mono, compteur_couleur, commentaire, cree_le, fournisseur)
+         VALUES (?,?,?,?,?,?,?)
          ON CONFLICT(numero_de_serie, date_compteurs) DO UPDATE SET
            compteur_mono=excluded.compteur_mono, compteur_couleur=excluded.compteur_couleur,
-           commentaire=excluded.commentaire, cree_le=excluded.cree_le`,
-        [serie, date, mono, coul, com, new Date().toISOString().slice(0, 16).replace('T', ' ')]);
+           commentaire=excluded.commentaire, cree_le=excluded.cree_le, fournisseur=excluded.fournisseur`,
+        [serie, date, mono, coul, com, new Date().toISOString().slice(0, 16).replace('T', ' '), four]);
     recalculerConsommation();
     await sauvegarder();
     toast('Correction enregistrée, consommation recalculée.');
@@ -140,6 +156,7 @@ function rendreListeCorrections() {
     document.getElementById('m-corrections').innerHTML = tableHTML('t-corrections', [
         { k: 'numero_de_serie', t: 'N° de série', html: l => `<a class="lien" onclick="afficherVue('machines',{serie:'${esc(l.numero_de_serie)}'})">${esc(l.numero_de_serie)}</a>` },
         { k: 'date_compteurs', t: 'Relevé', html: l => esc(libMois(l.date_compteurs)) },
+        { k: 'fournisseur', t: 'Fournisseur', html: l => esc(l.fournisseur || 'tous') },
         { k: 'compteur_mono', t: 'Compteur mono', type: 'n' }, { k: 'compteur_couleur', t: 'Compteur couleur', type: 'n' },
         { k: 'commentaire', t: 'Motif' }, { k: 'cree_le', t: 'Saisie le' },
         { k: 'id', t: '', export: false, html: l => `<button class="btn btn-sm btn-link text-danger" onclick="supprimerCorrection(${l.id})"><i class="fas fa-trash"></i></button>` },
