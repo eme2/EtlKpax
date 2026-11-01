@@ -98,6 +98,9 @@ function migrer() {
             index_mono_fin INTEGER, index_couleur_fin INTEGER, montant REAL,
             fichier TEXT, importe_le TEXT)`);
 
+    for (const c of ['statut', 'commentaire']) {
+        if (!colonnesDe('factures').includes(c)) run(`ALTER TABLE factures ADD COLUMN ${c} TEXT`);
+    }
     run('CREATE TABLE IF NOT EXISTS parametres (cle TEXT PRIMARY KEY, valeur TEXT)');
 
     // Objectifs repris de la version précédente (codés en dur dans stats.js)
