@@ -14,14 +14,30 @@
 let factu = null;        // { fournisseur, debut, fin }
 let factureLue = null;   // { nom, lignes: [[...]], ligneEntete }
 
+// Reconnaissance automatique des colonnes (titres normalisés : minuscules, sans accents).
+// Format SCC : "S/N", "Conso A4 N&B", "Conso A3 N&B", "Relevé A4 MONO", "TOTAL COUT PAGE"...
+// Les pages A3 sont additionnées en "équivalent A4" (A3 = 2 pages), comme pour le coût SCC.
+const estCout = h => /co[uû]t|cout|prix|montant|tarif|€/.test(h);
+const estIndex = h => /relev|index|compteur/.test(h);
+const estVolume = h => !estCout(h) && !estIndex(h) && /conso|vol|page|qt|quantit|nombre|copies|impression/.test(h);
+const estMono = h => /mono|n&b|noir|\bnb\b|black/.test(h);
+const estCouleur = h => /coul|color/.test(h);
+const estA3 = h => /\ba3\b/.test(h);
 const CHAMPS_FACTURE = [
-    { k: 'serie', lib: 'N° de série', obligatoire: true, re: /s[eé]rie|serial|n°\s*s|^ns$|^sn$/i },
-    { k: 'mono', lib: 'Volume mono', re: /(vol|pages|qt|quantit|nb|nombre|copies).*(mono|noir|n&b|nb|black)|^(mono|noir|n&b)$/i },
-    { k: 'couleur', lib: 'Volume couleur', re: /(vol|pages|qt|quantit|nb|nombre|copies).*(coul|color)|^(couleur|color)$/i },
-    { k: 'index_mono', lib: 'Index fin mono', re: /(index|compteur|releve).*(fin|actuel|nouveau).*(mono|noir|n&b)|(index|compteur).*(mono|noir).*(fin|actuel)/i },
-    { k: 'index_couleur', lib: 'Index fin couleur', re: /(index|compteur|releve).*(fin|actuel|nouveau).*(coul|color)|(index|compteur).*(coul|color).*(fin|actuel)/i },
-    { k: 'montant', lib: 'Montant (€)', re: /montant|total\s*ht|prix\s*total|€/i },
+    { k: 'serie', lib: 'N° de série', obligatoire: true, test: h => /^s\/?n\b|s[e]rie|serial|^ns$/.test(h) },
+    { k: 'mono', lib: 'Volume mono (A4)', test: h => estVolume(h) && estMono(h) && !estA3(h) },
+    { k: 'mono_a3', lib: 'Volume mono A3 (×2)', test: h => estVolume(h) && estMono(h) && estA3(h) },
+    { k: 'couleur', lib: 'Volume couleur (A4)', test: h => estVolume(h) && estCouleur(h) && !estA3(h) },
+    { k: 'couleur_a3', lib: 'Volume couleur A3 (×2)', test: h => estVolume(h) && estCouleur(h) && estA3(h) },
+    { k: 'index_mono', lib: 'Index fin mono (A4)', test: h => estIndex(h) && !estCout(h) && estMono(h) && !estA3(h) },
+    { k: 'index_mono_a3', lib: 'Index fin mono A3 (×2)', test: h => estIndex(h) && !estCout(h) && estMono(h) && estA3(h) },
+    { k: 'index_couleur', lib: 'Index fin couleur (A4)', test: h => estIndex(h) && !estCout(h) && estCouleur(h) && !estA3(h) },
+    { k: 'index_couleur_a3', lib: 'Index fin couleur A3 (×2)', test: h => estIndex(h) && !estCout(h) && estCouleur(h) && estA3(h) },
+    { k: 'montant', lib: 'Montant (€ HT)', test: h => /total\s*co[uû]t|montant|total\s*ht|prix\s*total/.test(h) },
+    { k: 'statut', lib: 'Statut (info)', test: h => /^statut/.test(h) },
+    { k: 'commentaire', lib: 'Commentaire (info)', test: h => /commentaire|remarque|observation/.test(h) },
 ];
+const testChamp = (c, entete) => c.test(normTxt(entete));
 
 function vueFacturation(el, params) {
     if (baseVide()) return messageBaseVide(el);
@@ -146,25 +162,34 @@ function colonnesCalc() {
 async function lireFacture(file) {
     if (!file) return;
     try {
-        let lignes;
         if (/\.(xlsx|xls|ods)$/i.test(file.name)) {
             const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
-            // Feuille contenant le plus de lignes
-            const feuille = wb.SheetNames.map(n => wb.Sheets[n]).sort((a, b) =>
-                XLSX.utils.sheet_to_json(b, { header: 1 }).length - XLSX.utils.sheet_to_json(a, { header: 1 }).length)[0];
-            lignes = XLSX.utils.sheet_to_json(feuille, { header: 1, defval: '', raw: true });
+            const feuilles = {};
+            for (const n of wb.SheetNames) {
+                feuilles[n] = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: '', raw: true });
+            }
+            // Feuille par défaut : celle mémorisée, sinon la 1re qui a une colonne n° de série
+            const memo = lireParametre(`feuille_facture_${factu.fournisseur}`, '');
+            const feuille = feuilles[memo] ? memo
+                : wb.SheetNames.find(n => feuilles[n].slice(0, 15).some(l => l.some(v => testChamp(CHAMPS_FACTURE[0], v)))) || wb.SheetNames[0];
+            factureLue = { nom: file.name, feuilles, feuille };
         } else {
-            lignes = Papa.parse(await lireFichierTexte(file), { skipEmptyLines: 'greedy' }).data;
+            factureLue = { nom: file.name, feuilles: { CSV: Papa.parse(await lireFichierTexte(file), { skipEmptyLines: 'greedy' }).data }, feuille: 'CSV' };
         }
-        lignes = lignes.map(l => l.map(v => typeof v === 'string' ? v.trim() : v));
-        let entete = lignes.findIndex(l => l.some(v => CHAMPS_FACTURE[0].re.test(String(v))));
-        if (entete < 0) entete = lignes.findIndex(l => l.filter(v => v !== '').length >= 3);
-        factureLue = { nom: file.name, lignes, ligneEntete: Math.max(entete, 0) };
-        rendreFacturation();
+        choisirFeuille(factureLue.feuille);
     } catch (e) {
         console.error(e);
         toast('Lecture de la facture impossible : ' + e.message, 'erreur');
     }
+}
+
+function choisirFeuille(nom) {
+    factureLue.feuille = nom;
+    factureLue.lignes = factureLue.feuilles[nom].map(l => l.map(v => typeof v === 'string' ? v.trim() : v));
+    let entete = factureLue.lignes.findIndex(l => l.some(v => testChamp(CHAMPS_FACTURE[0], v)));
+    if (entete < 0) entete = factureLue.lignes.findIndex(l => l.filter(v => v !== '').length >= 3);
+    factureLue.ligneEntete = Math.max(entete, 0);
+    rendreFacturation();
 }
 
 function rendreMappage(el) {
@@ -174,17 +199,21 @@ function rendreMappage(el) {
     const choix = {};
     for (const c of CHAMPS_FACTURE) {
         const m = memo[c.k] !== undefined ? entetes.indexOf(memo[c.k]) : -1;
-        choix[c.k] = m >= 0 ? m : entetes.findIndex(e => c.re.test(e));
+        choix[c.k] = m >= 0 ? m : entetes.findIndex(e => testChamp(c, e));
     }
     const apercu = lignes.slice(ligneEntete + 1, ligneEntete + 6);
     el.innerHTML = `<h3><i class="fas fa-table-columns me-2"></i>Colonnes de la facture « ${esc(nom)} »</h3>
         <div class="row g-2 align-items-end mb-2">
+            ${Object.keys(factureLue.feuilles).length > 1 ? `<div class="col-auto"><label class="form-label small">Onglet</label>
+                <select class="form-select form-select-sm" onchange="choisirFeuille(this.value)">${optionsHTML(Object.keys(factureLue.feuilles), factureLue.feuille)}</select></div>` : ''}
             <div class="col-auto"><label class="form-label small">Ligne des titres</label>
                 <input type="number" min="1" class="form-control form-control-sm" style="width:6rem" value="${ligneEntete + 1}"
                 onchange="factureLue.ligneEntete=Math.max(0,this.value-1);rendreFacturation()"></div>
             ${CHAMPS_FACTURE.map(c => `<div class="col-auto"><label class="form-label small">${esc(c.lib)}${c.obligatoire ? ' *' : ''}</label>
                 <select class="form-select form-select-sm" id="map-${c.k}">${optionsHTML(entetes.map((e, i) => [i, e]), choix[c.k] >= 0 ? choix[c.k] : '', '— aucune —')}</select></div>`).join('')}
         </div>
+        <p class="aide">Les colonnes A3 sont facultatives : si elles sont renseignées, les pages A3 comptent double (équivalent A4, comme dans le coût SCC).
+            Le choix des colonnes est mémorisé pour les prochaines factures.</p>
         <p class="aide">Aperçu des premières lignes :</p>
         <div class="tableau-wrap mb-2"><table class="table table-sm table-bordered"><thead><tr>${entetes.map(e => `<th>${esc(e)}</th>`).join('')}</tr></thead>
         <tbody>${apercu.map(l => `<tr>${entetes.map((_, i) => `<td>${esc(l[i])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
@@ -204,15 +233,20 @@ async function enregistrerFacture() {
     if (idx.serie < 0) return toast('Indiquez la colonne du n° de série.', 'erreur');
     if (idx.mono < 0 && idx.couleur < 0 && idx.index_mono < 0) return toast('Indiquez au moins une colonne de volume ou d\'index.', 'erreur');
     const val = (l, k) => idx[k] >= 0 ? num(l[idx[k]]) : null;
+    const txt = (l, k) => idx[k] >= 0 && l[idx[k]] !== '' ? String(l[idx[k]]) : null;
+    // A4 + 2 × A3 (équivalent A4) ; null si aucune des deux colonnes n'est renseignée
+    const equiv = (l, k) => { const a4 = val(l, k), a3 = val(l, k + '_a3'); return a4 === null && a3 === null ? null : (a4 || 0) + 2 * (a3 || 0); };
 
     // Regroupe par n° de série (une facture peut avoir plusieurs lignes par machine)
     const parSerie = new Map();
     for (const l of lignes.slice(ligneEntete + 1)) {
         const s = normSerie(l[idx.serie]);
         if (s.length < 4) continue;
-        const a = parSerie.get(s) || { mono: null, couleur: null, index_mono: null, index_couleur: null, montant: null };
-        for (const k of ['mono', 'couleur', 'montant']) { const v = val(l, k); if (v !== null) a[k] = (a[k] || 0) + v; }
-        for (const k of ['index_mono', 'index_couleur']) { const v = val(l, k); if (v !== null) a[k] = Math.max(a[k] ?? v, v); }
+        const a = parSerie.get(s) || { mono: null, couleur: null, index_mono: null, index_couleur: null, montant: null, statut: null, commentaire: null };
+        for (const k of ['mono', 'couleur']) { const v = equiv(l, k); if (v !== null) a[k] = (a[k] || 0) + v; }
+        { const v = val(l, 'montant'); if (v !== null) a.montant = (a.montant || 0) + v; }
+        for (const k of ['index_mono', 'index_couleur']) { const v = equiv(l, k); if (v !== null) a[k] = Math.max(a[k] ?? v, v); }
+        for (const k of ['statut', 'commentaire']) { const v = txt(l, k); if (v) a[k] = a[k] ? `${a[k]} / ${v}` : v; }
         parSerie.set(s, a);
     }
     if (!parSerie.size) return toast('Aucune ligne avec un n° de série trouvée : vérifiez la ligne des titres.', 'erreur');
@@ -222,10 +256,11 @@ async function enregistrerFacture() {
         run('DELETE FROM factures WHERE fournisseur=? AND periode_debut=? AND periode_fin=?', [factu.fournisseur, factu.debut, factu.fin]);
         for (const [s, a] of parSerie) {
             run(`INSERT INTO factures (fournisseur, periode_debut, periode_fin, numero_de_serie, volume_mono, volume_couleur,
-                 index_mono_fin, index_couleur_fin, montant, fichier, importe_le) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-                [factu.fournisseur, factu.debut, factu.fin, s, a.mono, a.couleur, a.index_mono, a.index_couleur, a.montant, nom, date]);
+                 index_mono_fin, index_couleur_fin, montant, statut, commentaire, fichier, importe_le) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+                [factu.fournisseur, factu.debut, factu.fin, s, a.mono, a.couleur, a.index_mono, a.index_couleur, a.montant, a.statut, a.commentaire, nom, date]);
         }
         ecrireParametre(`mappage_facture_${factu.fournisseur}`, memo);
+        ecrireParametre(`feuille_facture_${factu.fournisseur}`, factureLue.feuille);
     });
     await sauvegarder();
     factureLue = null;
@@ -263,32 +298,40 @@ function rendreComparaison(el, calc, factures, titre) {
             calcIndexMono: c ? c.finMono : null, factIndexMono: f ? f.index_mono_fin : null,
             calcIndexCouleur: c ? c.finCouleur : null, factIndexCouleur: f ? f.index_couleur_fin : null,
             montant: f ? f.montant : null, statuts: c ? c.statuts : '',
+            statutFact: f ? f.statut || '' : '', commentaire: f ? f.commentaire || '' : '',
         };
         l.ecartMono = c && f && f.volume_mono !== null ? f.volume_mono - c.mono : null;
         l.ecartCouleur = c && f && f.volume_couleur !== null ? f.volume_couleur - c.couleur : null;
         l.ecartIndexMono = c && f && f.index_mono_fin !== null && c.finMono !== null ? f.index_mono_fin - c.finMono : null;
         if (!c) {
             const connue = q1(`SELECT MAX(dateCompteurs) AS d FROM kpax WHERE upper(replace(trim(numero_de_serie),' ',''))=?`, [serie]).d;
-            l.resultat = connue ? `Facturée, sans conso calculée (dernier relevé ${libMois(connue)})` : 'Facturée, inconnue dans Kpax';
-            l.ko = true;
+            const pages = (f.volume_mono || 0) + (f.volume_couleur || 0);
+            l.ko = pages > 0;
+            l.resultat = (connue ? `Hors calcul (dernier relevé Kpax ${libMois(connue)})` : 'Hors Kpax')
+                + (pages > 0 ? ' — facturée' : ' — 0 page');
         } else if (!f) {
             l.resultat = (c.mono || c.couleur) ? 'Non facturée' : 'Non facturée (0 page)';
             l.ko = !!(c.mono || c.couleur);
         } else {
-            const ko = significatif(l.ecartMono, l.calcMono) || significatif(l.ecartCouleur, l.calcCouleur) || significatif(l.ecartIndexMono, l.calcIndexMono);
-            l.ko = ko;
-            l.resultat = ko ? 'Écart' : 'OK';
+            // Les volumes priment ; l'index n'est décisif que si la facture ne donne pas de volume
+            const ecartVolume = significatif(l.ecartMono, l.calcMono) || significatif(l.ecartCouleur, l.calcCouleur);
+            const ecartIndex = l.ecartIndexMono !== null && Math.abs(l.ecartIndexMono) > s.pages;
+            l.ko = ecartVolume || (!aVol && ecartIndex);
+            l.resultat = l.ko ? 'Écart' : (ecartIndex ? 'OK (index différent)' : 'OK');
         }
         return l;
     });
     const nbKo = lignes.filter(l => l.ko).length;
-    const tot = (k) => lignes.reduce((s, l) => s + (Number(l[k]) || 0), 0);
+    // Totaux calculés sur toutes les machines, avant le filtre "seulement les écarts"
+    const totaux = {};
+    for (const k of ['factMono', 'calcMono', 'factCouleur', 'calcCouleur']) totaux[k] = lignes.reduce((s, l) => s + (Number(l[k]) || 0), 0);
+    const tot = k => totaux[k];
     lignes.sort((a, b) => (b.ko - a.ko) || Math.abs(b.ecartMono || 0) - Math.abs(a.ecartMono || 0));
     if (seulementEcarts) lignes = lignes.filter(l => l.ko);
 
     const clsEcart = k => l => l[k] === null ? '' : (significatif(l[k], l[k.replace('ecart', 'calc')]) ? 'ecart-ko' : 'ecart-ok');
     const cols = [
-        { k: 'resultat', t: 'Résultat', html: l => `<span class="badge text-bg-${l.resultat === 'OK' ? 'success' : l.ko ? 'danger' : 'secondary'}">${esc(l.resultat)}</span>` },
+        { k: 'resultat', t: 'Résultat', html: l => `<span class="badge text-bg-${l.resultat.startsWith('OK') ? 'success' : l.ko ? 'danger' : 'secondary'}">${esc(l.resultat)}</span>` },
         { k: 'source', t: 'Source' }, { k: 'modele', t: 'Modèle' }, { k: 'serie', t: 'N° de série', html: lienSerie('serie') },
     ];
     if (aVol) cols.push(
@@ -298,9 +341,11 @@ function rendreComparaison(el, calc, factures, titre) {
         { k: 'ecartCouleur', t: 'Écart couleur', type: 'n', somme: true, cls: clsEcart('ecartCouleur') });
     if (aIndex) cols.push(
         { k: 'calcIndexMono', t: 'Index fin mono (Kpax)', type: 'n' }, { k: 'factIndexMono', t: 'Index fin mono (facture)', type: 'n' },
-        { k: 'ecartIndexMono', t: 'Écart index', type: 'n', cls: clsEcart('ecartIndexMono') });
+        { k: 'ecartIndexMono', t: 'Écart index', type: 'n', cls: l => l.ecartIndexMono && Math.abs(l.ecartIndexMono) > s.pages ? 'text-warning-emphasis fw-bold' : '' });
     if (factures.some(f => f.montant !== null)) cols.push({ k: 'montant', t: 'Montant facturé', type: 'n', dec: 2, somme: true });
-    cols.push({ k: 'statuts', t: 'À vérifier' });
+    cols.push({ k: 'statuts', t: 'À vérifier (calcul)' });
+    if (factures.some(f => f.statut)) cols.push({ k: 'statutFact', t: 'Statut (facture)' });
+    if (factures.some(f => f.commentaire)) cols.push({ k: 'commentaire', t: 'Commentaire (facture)' });
 
     el.innerHTML = `<h3>Comparaison : ${titre}</h3>
         <div class="kpis">
@@ -321,6 +366,8 @@ function rendreComparaison(el, calc, factures, titre) {
                 onchange="seulementEcarts=this.checked;rendreFacturation()"><label for="f-ko" class="form-check-label">Seulement les écarts</label></div>
         </div>
         ${tableHTML('t-comparaison', cols, lignes, { nomFichier: `comparaison_${factu.fournisseur}_${factu.debut}_${factu.fin}`, clsLigne: l => l.ko ? 'ligne-ko' : '' })}
-        <p class="aide mt-2 mb-0">Écart = facturé − calculé (positif : le fournisseur facture plus que Kpax).
-        Pour une machine en écart : cliquez sur son n° de série, comparez les index et, si la facture est juste, saisissez une correction.</p>`;
+        <p class="aide mt-2 mb-0">Écart = facturé − calculé (positif : le fournisseur facture plus que Kpax). Volumes en équivalent A4 (A3 = 2 pages).
+        Les petits écarts viennent souvent de la date des index : SCC relève au dernier jour du trimestre, Kpax le 1er du mois suivant ;
+        ils se compensent d'un trimestre à l'autre. Pour un écart important : cliquez sur le n° de série, comparez les index et,
+        si la facture est juste, saisissez une correction.</p>`;
 }

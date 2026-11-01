@@ -28,6 +28,12 @@ Chaque machine est classée OK / Écart / Non facturée / Inconnue, avec un seui
 > La consommation d'un mois se calcule avec le relevé du mois suivant :
 > pour le T1 (janvier → mars), il faut le relevé d'avril.
 
+**Facture SCC** (classeur Excel trimestriel) : l'onglet « RAPPORT Période » est choisi automatiquement et ses
+colonnes reconnues (`S/N`, `Conso A4/A3 N&B`, `Conso A4/A3 COULEUR`, `Relevé A4/A3`, `TOTAL COUT PAGE`,
+`Statut PARC`, `COMMENTAIRE`). Les volumes sont comparés en **équivalent A4** : SCC facture une page A3 au prix de
+deux A4. Les petits écarts viennent surtout de la date des index (30/09 chez SCC, 01/10 dans Kpax) et se
+compensent d'un trimestre à l'autre. SCC facture une machine neuve à partir d'un compteur 0, comme l'application.
+
 ## Corrections
 
 Menu **Machines & corrections** : une correction **remplace le compteur cumulé** d'une machine pour un relevé

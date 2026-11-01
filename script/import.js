@@ -39,19 +39,24 @@ function detecterMois(nom) {
     return m ? `${m[1]}-${m[2]}` : '';
 }
 
-// Les exports EMC contiennent aussi des machines non gérées : on ne garde que "Géré"
-function lignesRetenues(f) {
-    return f.lignes.filter(l => {
-        if (!String(l.numero_de_serie ?? '').trim()) return false;
-        if (f.fournisseur === 'EMC' && 'profil' in l) return normTxt(l.profil).startsWith('gere');
-        return true;
-    });
+// Les exports EMC contiennent tout le parc (y compris les machines SCC) :
+// on ne garde que le profil "Géré".
+function motifExclusion(f, l) {
+    if (!String(l.numero_de_serie ?? '').trim()) return 'sans n° de série';
+    if (f.fournisseur === 'EMC' && 'profil' in l && !normTxt(l.profil).startsWith('gere')) return `profil « ${l.profil || 'vide'} »`;
+    return null;
+}
+function lignesRetenues(f) { return f.lignes.filter(l => !motifExclusion(f, l)); }
+function exclusions(f) {
+    const m = {};
+    for (const l of f.lignes) { const x = motifExclusion(f, l); if (x) m[x] = (m[x] || 0) + 1; }
+    return Object.entries(m).map(([k, n]) => `${nf(n)} ${k}`).join(', ');
 }
 
 async function analyserFichier(file) {
     const f = {
         nom: file.name,
-        source: detecterSource(file.name),
+        source: detecterSource(file.name) || (db ? lireParametre(`source_${detecterFournisseur(file.name)}`, '') : ''),
         fournisseur: detecterFournisseur(file.name),
         dateCompteurs: detecterMois(file.name),
         lignes: [], colonnes: [], erreur: '',
@@ -112,7 +117,7 @@ function rendreAttente() {
             <td><select class="form-select form-select-sm" onchange="majAttente(${i},'source',this.value)">${optionsHTML(sources, f.source, '—')}</select></td>
             <td><select class="form-select form-select-sm" onchange="majAttente(${i},'fournisseur',this.value)">${optionsHTML([['SCC', 'SCC'], ['EMC', 'EMC-Konica']], f.fournisseur)}</select></td>
             <td><input class="form-control form-control-sm" style="width:7.5rem" value="${esc(f.dateCompteurs)}" placeholder="AAAA-MM" onchange="majAttente(${i},'dateCompteurs',this.value.trim())"></td>
-            <td class="n" title="${total} lignes dans le fichier">${nf(ret)}${ret !== total ? ` <span class="aide">/ ${nf(total)}</span>` : ''}</td>
+            <td class="n" title="${total} lignes dans le fichier">${nf(ret)}${ret !== total ? `<div class="aide">sur ${nf(total)} lignes · écartées : ${esc(exclusions(f))}</div>` : ''}</td>
             <td class="small">${e.html}</td>
             <td><button class="btn btn-sm btn-link text-danger" title="Retirer" onclick="fichiersEnAttente.splice(${i},1);rendreAttente()"><i class="fas fa-xmark"></i></button></td>
         </tr>`;
@@ -175,6 +180,7 @@ async function importerFichiers() {
         transaction(() => {
             for (const f of fichiersEnAttente) {
                 bilan.push({ ...f, n: insererFichier(f) });
+                if (!detecterSource(f.nom)) ecrireParametre(`source_${f.fournisseur}`, f.source);
             }
         });
         migrer(); // index sur numero_de_serie si nouvelle base

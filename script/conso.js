@@ -53,20 +53,28 @@ function lireCorrections() {
 
 // Construit, pour chaque machine, la suite chronologique de ses relevés
 // (un par mois, corrections appliquées).
+// Une machine est identifiée par fournisseur + n° de série : une même machine
+// peut apparaître chez SCC et chez EMC (transfert, double gestion...) et chaque
+// fournisseur facture séparément.
+function cleMachine(fournisseur, serie) { return `${fournisseur}|${serie}`; }
+
 function construireHistoriques(releves, corrections) {
-    const machines = new Map(); // serie -> Map(date -> releve)
+    const machines = new Map(); // "fournisseur|serie" -> Map(date -> releve)
     const premiers = new Map(); // "fournisseur|source" -> 1er mois importé
     for (const r of releves) {
-        const s = normSerie(r.numero_de_serie);
-        if (!machines.has(s)) machines.set(s, new Map());
-        machines.get(s).set(r.dateCompteurs, r); // en cas de doublon : le dernier gagne
+        const cle = cleMachine(r.fournisseur, normSerie(r.numero_de_serie));
+        if (!machines.has(cle)) machines.set(cle, new Map());
+        machines.get(cle).set(r.dateCompteurs, r); // en cas de doublon : le dernier gagne
         const lot = `${r.fournisseur}|${r.source}`;
         if (!premiers.has(lot) || r.dateCompteurs < premiers.get(lot)) premiers.set(lot, r.dateCompteurs);
     }
 
     const historiques = new Map();
-    for (const [serie, parDate] of machines) {
-        const corrs = corrections.get(serie) || new Map();
+    for (const [cle, parDate] of machines) {
+        const [fournisseur, serie] = [cle.slice(0, cle.indexOf('|')), cle.slice(cle.indexOf('|') + 1)];
+        // Correction sans fournisseur précisé : s'applique à tous
+        const corrs = new Map([...(corrections.get(serie) || new Map())]
+            .filter(([, c]) => !c.fournisseur || c.fournisseur === fournisseur));
         const dates = [...new Set([...parDate.keys(), ...corrs.keys()])].sort();
         let info = null;
         const pts = [];
@@ -89,7 +97,7 @@ function construireHistoriques(releves, corrections) {
             }
             pts.push(pt);
         }
-        historiques.set(serie, pts);
+        historiques.set(cle, { serie, fournisseur, pts });
     }
     return { historiques, premiers };
 }
@@ -213,7 +221,7 @@ function recalculerConsommation() {
              statut, detail, corrige, date_releve)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
         try {
-            for (const [serie, pts] of historiques) {
+            for (const { serie, pts } of historiques.values()) {
                 for (const l of consommationMachine(serie, pts, premiers)) {
                     st.run([l.periode, l.annee, l.mois, l.source, l.fournisseur, l.numero_de_serie, l.constructeur, l.modele, l.type_machine,
                         l.compteur_mono_debut, l.compteur_mono_fin, l.volume_pages_mono,

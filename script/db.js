@@ -57,6 +57,9 @@ function migrer() {
         if (tableExiste('consommation_ancienne')) run('DROP TABLE consommation_ancienne');
         run('ALTER TABLE consommation RENAME TO consommation_ancienne');
     }
+    // consommation est une table calculée : si sa structure a changé, on la recrée
+    const sqlConso = (q1("SELECT sql FROM sqlite_master WHERE type='table' AND name='consommation'") || {}).sql;
+    if (sqlConso && !sqlConso.includes('PRIMARY KEY (fournisseur, numero_de_serie, periode)')) run('DROP TABLE consommation');
     run(`CREATE TABLE IF NOT EXISTS consommation (
             periode TEXT NOT NULL,              -- mois consommé AAAA-MM
             annee INTEGER, mois INTEGER,
@@ -65,7 +68,7 @@ function migrer() {
             compteur_mono_debut INTEGER, compteur_mono_fin INTEGER, volume_pages_mono INTEGER,
             compteur_couleur_debut INTEGER, compteur_couleur_fin INTEGER, volume_pages_couleur INTEGER,
             statut TEXT, detail TEXT, corrige INTEGER DEFAULT 0, date_releve TEXT,
-            PRIMARY KEY (numero_de_serie, periode))`);
+            PRIMARY KEY (fournisseur, numero_de_serie, periode))`);
 
     // Corrections manuelles : remplacent (ou ajoutent) un relevé de compteur
     run(`CREATE TABLE IF NOT EXISTS corrections (
@@ -77,6 +80,8 @@ function migrer() {
             commentaire TEXT,
             cree_le TEXT,
             UNIQUE (numero_de_serie, date_compteurs))`);
+    // fournisseur concerné (vide = tous) : utile si une machine est chez SCC et EMC
+    if (!colonnesDe('corrections').includes('fournisseur')) run('ALTER TABLE corrections ADD COLUMN fournisseur TEXT');
 
     // Objectifs annuels en pages et prix moyen par page
     run(`CREATE TABLE IF NOT EXISTS objectifs (
@@ -93,6 +98,9 @@ function migrer() {
             index_mono_fin INTEGER, index_couleur_fin INTEGER, montant REAL,
             fichier TEXT, importe_le TEXT)`);
 
+    for (const c of ['statut', 'commentaire']) {
+        if (!colonnesDe('factures').includes(c)) run(`ALTER TABLE factures ADD COLUMN ${c} TEXT`);
+    }
     run('CREATE TABLE IF NOT EXISTS parametres (cle TEXT PRIMARY KEY, valeur TEXT)');
 
     // Objectifs repris de la version précédente (codés en dur dans stats.js)
