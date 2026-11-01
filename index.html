@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EtlKpax – Suivi des compteurs</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="styles/app.css">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <header class="barre-haut">
+        <div class="titre"><i class="fas fa-print me-2"></i>EtlKpax</div>
+        <div id="statut-base" class="statut-base">Chargement…</div>
+    </header>
+
+    <div class="disposition">
+        <nav class="menu">
+            <div class="menu-groupe">Suivi</div>
+            <a class="nav-vue" data-vue="tableau"><i class="fas fa-gauge"></i>Tableau de bord</a>
+            <a class="nav-vue" data-vue="import"><i class="fas fa-file-import"></i>Importer Kpax</a>
+            <div class="menu-groupe">Vérifier</div>
+            <a class="nav-vue" data-vue="facturation"><i class="fas fa-file-invoice-dollar"></i>Facturation</a>
+            <a class="nav-vue" data-vue="budget"><i class="fas fa-bullseye"></i>Budget annuel</a>
+            <a class="nav-vue" data-vue="consommation"><i class="fas fa-table"></i>Consommation</a>
+            <div class="menu-groupe">Corriger</div>
+            <a class="nav-vue" data-vue="controles"><i class="fas fa-triangle-exclamation"></i>À vérifier <span id="badge-controles" class="badge text-bg-warning ms-auto"></span></a>
+            <a class="nav-vue" data-vue="machines"><i class="fas fa-pen-to-square"></i>Machines &amp; corrections</a>
+            <div class="menu-groupe">Données</div>
+            <a class="nav-vue" data-vue="base"><i class="fas fa-database"></i>Base de données</a>
+        </nav>
+
+        <main id="contenu" class="contenu"></main>
+    </div>
+
+    <div id="toasts" class="toasts"></div>
+
+    <script src="script/utils.js"></script>
+    <script src="script/db.js"></script>
+    <script src="script/regles.js"></script>
+    <script src="script/conso.js"></script>
+    <script src="script/import.js"></script>
+    <script src="script/vues.js"></script>
+    <script src="script/machines.js"></script>
+    <script src="script/facturation.js"></script>
+    <script src="script/budget.js"></script>
+    <script src="script/app.js"></script>
+</body>
+</html>
