@@ -1,5 +1,16 @@
-
+# Données confidentielles : ne jamais publier sur GitHub
 bdd/
+donnees/
+*.sqlite
+*.sqlite3
+*.db
+*.csv
+*.xlsx
+*.xls
+*.ods
+*.pdf
+
+# Divers
 ETL.code-workspace
 .DS_Store
-
+node_modules/

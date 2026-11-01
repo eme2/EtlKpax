@@ -1,0 +1,119 @@
+:root {
+    --vert: #1e8e4e;
+    --vert-clair: #e8f5ee;
+    --gris: #f5f6f8;
+    --bord: #dee2e6;
+}
+
+body {
+    background: var(--gris);
+    font-size: 0.92rem;
+}
+
+.barre-haut {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.6rem 1.2rem;
+    background: var(--vert);
+    color: #fff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, .15);
+}
+.barre-haut .titre { font-size: 1.25rem; font-weight: 600; white-space: nowrap; }
+.statut-base { font-size: 0.85rem; text-align: right; }
+.statut-base .btn { padding: 0.1rem 0.5rem; font-size: 0.8rem; }
+
+.disposition { display: flex; min-height: calc(100vh - 52px); background: linear-gradient(to right, #fff 230px, var(--gris) 230px); }
+
+.menu {
+    width: 230px;
+    flex-shrink: 0;
+    background: #fff;
+    border-right: 1px solid var(--bord);
+    padding: 0.8rem 0.6rem;
+    position: sticky;
+    top: 52px;
+    height: calc(100vh - 52px);
+    overflow-y: auto;
+}
+.menu-groupe {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: #888;
+    margin: 0.9rem 0.5rem 0.3rem;
+}
+.nav-vue {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.45rem 0.6rem;
+    border-radius: 6px;
+    color: #333;
+    text-decoration: none;
+    cursor: pointer;
+}
+.nav-vue i { width: 1.1rem; text-align: center; color: #666; }
+.nav-vue:hover { background: var(--gris); }
+.nav-vue.active { background: var(--vert); color: #fff; }
+.nav-vue.active i { color: #fff; }
+
+.contenu { flex: 1; padding: 1.2rem 1.5rem; min-width: 0; }
+.contenu h2 { font-size: 1.35rem; margin-bottom: 0.2rem; }
+.contenu .sous-titre { color: #666; margin-bottom: 1rem; }
+
+.carte { background: #fff; border: 1px solid var(--bord); border-radius: 8px; padding: 1rem 1.2rem; margin-bottom: 1rem; }
+.carte h3 { font-size: 1.05rem; margin-bottom: 0.7rem; }
+.etape { display: inline-flex; width: 1.6rem; height: 1.6rem; border-radius: 50%; background: var(--vert); color: #fff; align-items: center; justify-content: center; font-size: 0.85rem; margin-right: 0.4rem; }
+
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.8rem; margin-bottom: 1rem; }
+.kpi { background: #fff; border: 1px solid var(--bord); border-radius: 8px; padding: 0.8rem 1rem; }
+.kpi .libelle { font-size: 0.78rem; color: #666; text-transform: uppercase; letter-spacing: .03em; }
+.kpi .valeur { font-size: 1.5rem; font-weight: 600; }
+.kpi .detail { font-size: 0.82rem; color: #555; }
+
+.zone-depot {
+    border: 2px dashed #9bc5ab;
+    background: var(--vert-clair);
+    border-radius: 8px;
+    padding: 1.5rem;
+    text-align: center;
+    cursor: pointer;
+}
+.zone-depot.survol { background: #d3eddd; }
+
+.tableau-wrap { overflow-x: auto; max-height: 70vh; overflow-y: auto; }
+.table { font-size: 0.85rem; margin-bottom: 0; }
+.table thead th { position: sticky; top: 0; background: #f0f2f4; z-index: 1; white-space: nowrap; cursor: pointer; user-select: none; }
+.table td.n, .table th.n { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.table tfoot td { font-weight: 600; background: #f0f2f4; position: sticky; bottom: 0; }
+.ecart-ok { color: #1e8e4e; }
+.ecart-ko { color: #c62828; font-weight: 600; }
+tr.ligne-ko > td { background: #fff3f3 !important; }
+tr.ligne-info > td { background: #fffbea !important; }
+
+.couverture td, .couverture th { text-align: center; }
+.couverture .ok { background: var(--vert-clair); color: var(--vert); }
+.couverture .manque { background: #fdecea; color: #c62828; }
+
+.graphes { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 1rem; }
+.graphe { background: #fff; border: 1px solid var(--bord); border-radius: 8px; padding: 0.8rem; height: 320px; }
+
+.toasts { position: fixed; bottom: 1rem; right: 1rem; z-index: 50; display: flex; flex-direction: column; gap: 0.5rem; }
+.toast-msg { background: #333; color: #fff; padding: 0.6rem 1rem; border-radius: 6px; box-shadow: 0 2px 8px rgba(0, 0, 0, .25); max-width: 420px; }
+.toast-msg.erreur { background: #c62828; }
+.toast-msg.succes { background: var(--vert); }
+
+.aide { font-size: 0.82rem; color: #666; }
+.lien { cursor: pointer; color: #0d6efd; text-decoration: underline; }
+
+@media (max-width: 800px) {
+    .disposition { background: var(--gris); }
+    .disposition { flex-direction: column; }
+    .menu { width: 100%; height: auto; position: static; }
+    .graphes { grid-template-columns: 1fr; }
+}
