@@ -39,6 +39,23 @@ function detecterMois(nom) {
     return m ? `${m[1]}-${m[2]}` : '';
 }
 
+// Export EMC avec colonne "Nom agent" : la source est donnée ligne par ligne
+//   "Eurométropole de Strasbourg" -> EMS ; "EMS Ecoles" -> ECOLE
+function sourceDeLigne(l) {
+    const a = normTxt(l.nom_agent);
+    if (!a) return null;
+    if (a.includes('ecole')) return 'ECOLE';
+    if (a.includes('eurometropole') || a.includes('strasbourg')) return 'EMS';
+    return null;
+}
+function sourcePourLigne(f, l) { return (f.parLigne && sourceDeLigne(l)) || f.source || null; }
+// Répartition des lignes retenues par source : { EMS: 30, ECOLE: 2, '': n }
+function repartitionSources(f) {
+    const m = {};
+    for (const l of lignesRetenues(f)) { const src = sourcePourLigne(f, l) || ''; m[src] = (m[src] || 0) + 1; }
+    return m;
+}
+
 // Les exports EMC contiennent tout le parc (y compris les machines SCC) :
 // on ne garde que le profil "Géré".
 function motifExclusion(f, l) {
@@ -66,6 +83,8 @@ async function analyserFichier(file) {
         const res = Papa.parse(texte, { header: true, skipEmptyLines: 'greedy', transformHeader: nettoyerEntete });
         f.colonnes = res.meta.fields.filter(c => c);
         f.lignes = res.data;
+        f.parLigne = f.colonnes.includes('nom_agent');
+        if (f.parLigne) f.source = detecterSource(file.name); // la colonne prime sur la source mémorisée
         if (!f.colonnes.includes('numero_de_serie')) {
             f.erreur = "Colonne « Numéro de série » introuvable : ce fichier n'est pas un export Kpax.";
         }
@@ -85,13 +104,18 @@ async function ajouterFichiers(files) {
 
 function etatFichier(f) {
     if (f.erreur) return { ok: false, html: `<span class="text-danger">${esc(f.erreur)}</span>` };
-    if (!f.source) return { ok: false, html: '<span class="text-danger">Choisir la source</span>' };
+    const sansSource = f.parLigne ? (repartitionSources(f)[''] || 0) : 0;
+    if (f.parLigne && sansSource) return { ok: false, html: `<span class="text-danger">${nf(sansSource)} ligne(s) avec un « Nom agent » non reconnu : choisir leur source</span>` };
+    if (!f.parLigne && !f.source) return { ok: false, html: '<span class="text-danger">Choisir la source</span>' };
     if (!estPeriode(f.dateCompteurs)) return { ok: false, html: '<span class="text-danger">Mois invalide (AAAA-MM)</span>' };
-    const doublon = fichiersEnAttente.filter(x => x.source === f.source && x.fournisseur === f.fournisseur && x.dateCompteurs === f.dateCompteurs);
+    const doublon = fichiersEnAttente.filter(x => x.fournisseur === f.fournisseur && x.dateCompteurs === f.dateCompteurs
+        && (x.parLigne || f.parLigne || x.source === f.source));
     if (doublon.length > 1) return { ok: false, html: '<span class="text-danger">Même lot qu\'un autre fichier</span>' };
     let existant = 0;
     if (db && colonnesDe('kpax').includes('numero_de_serie')) {
-        existant = q1('SELECT COUNT(*) AS n FROM kpax WHERE source=? AND fournisseur=? AND dateCompteurs=?', [f.source, f.fournisseur, f.dateCompteurs]).n;
+        existant = f.parLigne
+            ? q1('SELECT COUNT(*) AS n FROM kpax WHERE fournisseur=? AND dateCompteurs=?', [f.fournisseur, f.dateCompteurs]).n
+            : q1('SELECT COUNT(*) AS n FROM kpax WHERE source=? AND fournisseur=? AND dateCompteurs=?', [f.source, f.fournisseur, f.dateCompteurs]).n;
     }
     return existant
         ? { ok: true, html: `<span class="text-warning-emphasis"><i class="fas fa-rotate me-1"></i>Déjà importé : remplacera ${nf(existant)} relevé(s)</span>` }
@@ -114,7 +138,10 @@ function rendreAttente() {
         const total = f.lignes.length, ret = lignesRetenues(f).length;
         h += `<tr>
             <td class="small">${esc(f.nom)}</td>
-            <td><select class="form-select form-select-sm" onchange="majAttente(${i},'source',this.value)">${optionsHTML(sources, f.source, '—')}</select></td>
+            <td>${f.parLigne
+                ? `<div class="small" title="Source lue dans la colonne « Nom agent »">par ligne : ${esc(Object.entries(repartitionSources(f)).filter(([k]) => k).map(([k, n]) => `${nf(n)} ${k}`).join(', ') || '—')}</div>
+                   ${repartitionSources(f)[''] ? `<select class="form-select form-select-sm mt-1" onchange="majAttente(${i},'source',this.value)">${optionsHTML(sources, f.source, 'non reconnus →')}</select>` : ''}`
+                : `<select class="form-select form-select-sm" onchange="majAttente(${i},'source',this.value)">${optionsHTML(sources, f.source, '—')}</select>`}</td>
             <td><select class="form-select form-select-sm" onchange="majAttente(${i},'fournisseur',this.value)">${optionsHTML([['SCC', 'SCC'], ['EMC', 'EMC-Konica']], f.fournisseur)}</select></td>
             <td><input class="form-control form-control-sm" style="width:7.5rem" value="${esc(f.dateCompteurs)}" placeholder="AAAA-MM" onchange="majAttente(${i},'dateCompteurs',this.value.trim())"></td>
             <td class="n" title="${total} lignes dans le fichier">${nf(ret)}${ret !== total ? `<div class="aide">sur ${nf(total)} lignes · écartées : ${esc(exclusions(f))}</div>` : ''}</td>
@@ -148,14 +175,15 @@ function insererFichier(f) {
             existantes.set(c, t);
         }
     }
-    run('DELETE FROM kpax WHERE source=? AND fournisseur=? AND dateCompteurs=?', [f.source, f.fournisseur, f.dateCompteurs]);
+    if (f.parLigne) run('DELETE FROM kpax WHERE fournisseur=? AND dateCompteurs=?', [f.fournisseur, f.dateCompteurs]);
+    else run('DELETE FROM kpax WHERE source=? AND fournisseur=? AND dateCompteurs=?', [f.source, f.fournisseur, f.dateCompteurs]);
     const cols = [...COLONNES_RESERVEES, ...f.colonnes];
     const numeriques = new Set(f.colonnes.filter(c => /INT|REAL|NUM/.test(existantes.get(c))));
     const st = db.prepare(`INSERT INTO kpax (${cols.map(c => `"${c}"`).join(',')}) VALUES (${cols.map(() => '?').join(',')})`);
     const lignes = lignesRetenues(f);
     try {
         for (const l of lignes) {
-            const vals = [f.source, f.fournisseur, f.dateCompteurs];
+            const vals = [sourcePourLigne(f, l), f.fournisseur, f.dateCompteurs];
             for (const c of f.colonnes) {
                 let v = l[c];
                 if (v === undefined || v === '') v = null;
@@ -179,8 +207,11 @@ async function importerFichiers() {
         const bilan = [];
         transaction(() => {
             for (const f of fichiersEnAttente) {
-                bilan.push({ ...f, n: insererFichier(f) });
-                if (!detecterSource(f.nom)) ecrireParametre(`source_${f.fournisseur}`, f.source);
+                const rep = repartitionSources(f);
+                const n = insererFichier(f);
+                if (f.parLigne) Object.entries(rep).forEach(([src, k]) => bilan.push({ ...f, source: src, n: k }));
+                else bilan.push({ ...f, n });
+                if (!f.parLigne && !detecterSource(f.nom)) ecrireParametre(`source_${f.fournisseur}`, f.source);
             }
         });
         migrer(); // index sur numero_de_serie si nouvelle base
@@ -212,7 +243,9 @@ function vueImport(el) {
                 <input type="file" id="fichiers-kpax" accept=".csv,.txt" multiple hidden>
             </label>
             <p class="aide mt-2 mb-0">Détection automatique depuis le nom : <b>ECOLE</b>/<b>EMS</b> → source,
-                <b>EMC</b> → fournisseur EMC-Konica (sinon SCC), date du fichier → mois du relevé.</p>
+                <b>EMC</b> → fournisseur EMC-Konica (sinon SCC), date du fichier → mois du relevé.
+                Pour EMC, la source est lue ligne par ligne dans la colonne <b>Nom agent</b>
+                (« Eurométropole de Strasbourg » → EMS, « EMS Ecoles » → ECOLE).</p>
         </div>
         <div id="attente"></div>
         <div id="resultat-import"></div>

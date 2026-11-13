@@ -14,6 +14,8 @@ Une connexion Internet est nécessaire au chargement (bibliothèques), mais **au
 1. **Importer Kpax** : glisser tous les exports du mois (ECOLE, EMS, EMC). Source, fournisseur et mois
    sont détectés depuis le nom du fichier et peuvent être corrigés avant l'import.
    Réimporter un même mois remplace les relevés (pas de doublon).
+   Export EMC : la source est lue ligne par ligne dans la colonne **Nom agent**
+   (« Eurométropole de Strasbourg » → EMS, « EMS Ecoles » → ECOLE) ; à défaut, elle est choisie pour tout le fichier.
 2. La consommation est recalculée et la base enregistrée **automatiquement dans le navigateur**.
 3. **À vérifier** : nouvelles machines, relevés manquants, compteurs en baisse, machines déplacées ou absentes.
 4. Bouton **Copie de sauvegarde** (en haut à droite) : télécharger régulièrement la base `.sqlite`.
@@ -23,7 +25,9 @@ Une connexion Internet est nécessaire au chargement (bibliothèques), mais **au
 Menu **Facturation** : choisir le fournisseur et le trimestre, puis importer l'annexe détaillée de la facture
 (CSV ou Excel, une ligne par machine). On indique une fois quelles colonnes contiennent le n° de série,
 les volumes mono/couleur (et éventuellement les index de fin et le montant). Ce choix est mémorisé.
-Chaque machine est classée OK / Écart / Non facturée / Inconnue, avec un seuil de tolérance réglable.
+Chaque machine est classée OK / Écart / Non facturée / Hors Kpax. Un écart est signalé s'il dépasse à la fois
+un nombre de pages et un pourcentage du volume calculé (par défaut 20 pages et 2 %). Ces seuils se règlent par
+fournisseur dans l'écran de comparaison et sont enregistrés immédiatement dans la base.
 
 > La consommation d'un mois se calcule avec le relevé du mois suivant :
 > pour le T1 (janvier → mars), il faut le relevé d'avril.
