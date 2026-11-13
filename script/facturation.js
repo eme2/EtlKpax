@@ -276,12 +276,33 @@ async function supprimerFacture() {
 }
 
 // ------------------------- Comparaison -------------------------
-let seuilsEcart = null;
 let seulementEcarts = false;
 
+// Seuils de tolérance, propres à chaque fournisseur, enregistrés dans la base (table parametres).
+// Un écart est significatif s'il dépasse À LA FOIS le nombre de pages et le pourcentage du volume calculé.
+const SEUILS_DEFAUT = { pages: 20, pct: 2 };
+function lireSeuils(fournisseur) {
+    const s = lireParametre(`seuils_ecart_${fournisseur}`, null) || lireParametre('seuils_ecart', null) || {};
+    return { ...SEUILS_DEFAUT, ...s };
+}
+async function majSeuil(champ, valeur) {
+    const v = num(valeur);
+    if (v === null || v < 0) return toast('Seuil invalide : saisir un nombre positif ou nul.', 'erreur');
+    const s = lireSeuils(factu.fournisseur);
+    s[champ] = v;
+    ecrireParametre(`seuils_ecart_${factu.fournisseur}`, s);
+    await sauvegarder();
+    toast(`Seuils ${factu.fournisseur} enregistrés : ${nf(s.pages)} pages et ${nf(s.pct, 1)} %.`);
+    rendreFacturation();
+}
+async function reinitialiserSeuils() {
+    run('DELETE FROM parametres WHERE cle IN (?, ?)', [`seuils_ecart_${factu.fournisseur}`, 'seuils_ecart']);
+    await sauvegarder();
+    rendreFacturation();
+}
+
 function rendreComparaison(el, calc, factures, titre) {
-    if (!seuilsEcart) seuilsEcart = lireParametre('seuils_ecart', { pages: 20, pct: 2 });
-    const s = seuilsEcart;
+    const s = lireSeuils(factu.fournisseur);
     const significatif = (ecart, base) => ecart !== null && Math.abs(ecart) > Math.max(s.pages, Math.abs(base || 0) * s.pct / 100);
     const aIndex = factures.some(f => f.index_mono_fin !== null);
     const aVol = factures.some(f => f.volume_mono !== null || f.volume_couleur !== null);
@@ -357,11 +378,13 @@ function rendreComparaison(el, calc, factures, titre) {
                 <div class="detail">calculé ${nf(tot('calcCouleur'))} · écart <b>${nf(tot('factCouleur') - tot('calcCouleur'))}</b></div></div>` : ''}
         </div>
         <div class="row g-2 align-items-center mb-2 small">
-            <div class="col-auto">Écart significatif au-delà de</div>
-            <div class="col-auto"><input type="number" class="form-control form-control-sm" style="width:5.5rem" value="${s.pages}" onchange="seuilsEcart.pages=Number(this.value)||0;ecrireParametre('seuils_ecart',seuilsEcart);rendreFacturation()"></div>
-            <div class="col-auto">pages et</div>
-            <div class="col-auto"><input type="number" class="form-control form-control-sm" style="width:5rem" value="${s.pct}" onchange="seuilsEcart.pct=Number(this.value)||0;ecrireParametre('seuils_ecart',seuilsEcart);rendreFacturation()"></div>
-            <div class="col-auto">%</div>
+            <div class="col-auto">Tolérance ${esc(factu.fournisseur)} : écart signalé s'il dépasse</div>
+            <div class="col-auto"><input type="number" min="0" step="1" class="form-control form-control-sm" style="width:5.5rem" value="${s.pages}" onchange="majSeuil('pages', this.value)"></div>
+            <div class="col-auto">pages <b>et</b></div>
+            <div class="col-auto"><input type="number" min="0" step="0.5" class="form-control form-control-sm" style="width:5rem" value="${s.pct}" onchange="majSeuil('pct', this.value)"></div>
+            <div class="col-auto">% du volume calculé</div>
+            ${s.pages !== SEUILS_DEFAUT.pages || s.pct !== SEUILS_DEFAUT.pct
+                ? `<div class="col-auto"><a class="lien" onclick="reinitialiserSeuils()">valeurs par défaut (${SEUILS_DEFAUT.pages} pages, ${SEUILS_DEFAUT.pct} %)</a></div>` : ''}
             <div class="col-auto form-check ms-3"><input type="checkbox" class="form-check-input" id="f-ko" ${seulementEcarts ? 'checked' : ''}
                 onchange="seulementEcarts=this.checked;rendreFacturation()"><label for="f-ko" class="form-check-label">Seulement les écarts</label></div>
         </div>
